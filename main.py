@@ -115,6 +115,43 @@ def hill_climbing(func: Function,
     return {'best': best, 'best_f': best_f, 'history': history}
 
 
+def simulated_annealing(func: Function,
+                        dimension=2,
+                        lb=-5.0, ub=5.0,
+                        iterations=300,
+                        T0=100, Tmin=0.5, alpha=0.95,
+                        sigma=0.3,
+                        seed=None):
+    if seed is not None:
+        np.random.seed(seed)
+
+    current = np.random.uniform(lb, ub, size=dimension)
+    current_f = float(func.eval(current))
+    best = current.copy(); best_f = current_f
+    history = [(current.copy(), current_f)]
+
+    T = T0
+    for _ in range(iterations):
+        cand = current + np.random.normal(0, sigma, size=dimension)
+        cand = np.clip(cand, lb, ub)
+        fval = float(func.eval(cand))
+
+        if fval < current_f:
+            current, current_f = cand, fval
+        else:
+            r = np.random.rand()
+            if r < np.exp(-(fval - current_f) / T):
+                current, current_f = cand, fval
+
+        if current_f < best_f:
+            best, best_f = current.copy(), current_f
+
+        history.append((current.copy(), current_f))
+        T = max(T * alpha, Tmin)
+
+    return {'best': best, 'best_f': best_f, 'history': history}
+
+
 # --------------------------
 # Pomocné funkce pro Tkinter
 # --------------------------
