@@ -139,7 +139,10 @@ def show_in_tk(fig, frame, anim=None, update_fn=None, total_frames=None):
 # Animace algoritmů
 # --------------------------
 
-def animate_algorithm(root_frame, func_name, lb, ub, algo="blind", iterations=200, seed=42):
+def animate_algorithm(root_frame, func_name, lb, ub, algo="blind",
+                      iterations=200, seed=42,
+                      grid_res=60, max_trail_points=80):
+
     # Získání historie zvoleného algoritmu
     func = Function(func_name)
     if algo=="blind":
@@ -148,9 +151,8 @@ def animate_algorithm(root_frame, func_name, lb, ub, algo="blind", iterations=20
         history = hill_climbing(func, lb=lb, ub=ub, iterations=iterations, sigma=0.4, k_neighbors=10, seed=seed)['history']
 
     # Vytvoření mřížky pro vykreslení povrchu
-    grid_res = 140
     xs = np.linspace(lb, ub, grid_res); ys = np.linspace(lb, ub, grid_res)
-    X,Y = np.meshgrid(xs, ys)
+    X, Y = np.meshgrid(xs, ys)
     vec_eval = np.vectorize(lambda a,b: float(func.eval([a,b])))
     Z = vec_eval(X, Y)
 
@@ -159,9 +161,12 @@ def animate_algorithm(root_frame, func_name, lb, ub, algo="blind", iterations=20
     ax3d = fig.add_subplot(121, projection="3d")
     ax2d = fig.add_subplot(122)
 
-    ax3d.plot_surface(X, Y, Z, cmap="viridis", alpha=0.7, linewidth=0, antialiased=True)
-    cset = ax2d.contourf(X, Y, Z, levels=60, cmap="viridis")
-    fig.colorbar(cset, ax=ax2d, shrink=0.6)
+    # Rychlejší 3D povrch: nižší rozlišení a antialias vypnuto
+    surf = ax3d.plot_surface(X, Y, Z, cmap="viridis", alpha=0.8, linewidth=0, antialiased=False)
+
+    # Rychlejší 2D: pcolormesh místo contourf (shading='auto')
+    mesh = ax2d.pcolormesh(X, Y, Z, shading='auto')
+    fig.colorbar(mesh, ax=ax2d, shrink=0.6)
 
     ax3d.set_title(f"{func.name.capitalize()} (3D)")
     ax2d.set_title(f"{func.name.capitalize()} (2D kontura)")
@@ -173,18 +178,18 @@ def animate_algorithm(root_frame, func_name, lb, ub, algo="blind", iterations=20
     frames = positions.shape[0]
 
     # Scatter body: průhledná stopa, aktuální bod, nejlepší bod
-    trail3d = ax3d.scatter([], [], [], s=20, c='red', alpha=0.3)
-    trail2d = ax2d.scatter([], [], s=20, c='red', alpha=0.3)
+    # (ponecháme objekty, pouze měníme jejich offsety místo rekreace)
+    trail3d = ax3d.scatter([], [], [], s=18, c='red', alpha=0.25)
+    trail2d = ax2d.scatter([], [], s=18, c='red', alpha=0.25)
     scatter3d = ax3d.scatter([], [], [], s=60, c='red')
     scatter2d = ax2d.scatter([], [], s=60, c='red')
-    best3d = ax3d.scatter([], [], [], s=120, marker='*', color='gold')
-    best2d = ax2d.scatter([], [], s=120, marker='*', color='gold')
+    best3d = ax3d.scatter([], [], [], s=140, marker='*', color='gold')
+    best2d = ax2d.scatter([], [], s=140, marker='*', color='gold')
 
     ax3d.view_init(elev=30, azim=-60)
 
     state = {'idx':0, 'playing':True, 'interval':100}
 
-    # Inicializace prázdné animace
     def init():
         trail3d._offsets3d = ([], [], [])
         trail2d.set_offsets([])
@@ -194,16 +199,31 @@ def animate_algorithm(root_frame, func_name, lb, ub, algo="blind", iterations=20
         best2d.set_offsets([])
         return trail3d, trail2d, scatter3d, scatter2d, best3d, best2d
 
-    # Aktualizace pro každý frame animace
+    # Pomocná funkce: vezme pole bodů a decimuje/omezuje je pro vykreslení (výkon)
+    def decimate_points(pts, vals, max_points=max_trail_points):
+        n = pts.shape[0]
+        if n <= max_points:
+            return pts, vals
+        # rovnoměrné subsamplování posledních n bodů, aby zachovat průběh
+        stride = max(1, n // max_points)
+        idx = np.arange(0, n, stride)
+        # zajistit, že poslední bod je obsažen
+        if idx[-1] != n-1:
+            idx = np.append(idx, n-1)
+        return pts[idx], vals[idx]
+
     def update(frame):
         i = int(frame)
         state['idx'] = i
 
-        # Stopová trajektorie do aktuálního bodu
+        # Stopová trajektorie do aktuálního bodu (decimovat pro výkon)
         pts = positions[:i+1]
         zs = values[:i+1]
-        trail3d._offsets3d = (pts[:,0], pts[:,1], zs)
-        trail2d.set_offsets(pts[:,0:2])
+        pts_disp, zs_disp = decimate_points(pts, zs, max_points=max_trail_points)
+        # 3D trail
+        trail3d._offsets3d = (pts_disp[:,0], pts_disp[:,1], zs_disp)
+        # 2D trail
+        trail2d.set_offsets(pts_disp[:,0:2])
 
         # Aktuální bod
         cx, cy = positions[i]
@@ -211,7 +231,7 @@ def animate_algorithm(root_frame, func_name, lb, ub, algo="blind", iterations=20
         scatter3d._offsets3d = ([cx], [cy], [cz])
         scatter2d.set_offsets([[cx, cy]])
 
-        # Nejlepší nalezený bod
+        # Nejlepší nalezený bod (do i)
         best_idx = np.argmin(values[:i+1])
         bx, by = positions[best_idx]
         bz = values[best_idx]
@@ -220,26 +240,17 @@ def animate_algorithm(root_frame, func_name, lb, ub, algo="blind", iterations=20
 
         return trail3d, trail2d, scatter3d, scatter2d, best3d, best2d
 
-    # Spuštění animace
     ani = animation.FuncAnimation(fig, update, frames=frames, init_func=init,
                                   interval=state['interval'], blit=False)
     ani.event_source.start()
 
-    # Vložení figure do tkinter frame
     canvas = show_in_tk(fig, root_frame, anim=ani, update_fn=update, total_frames=frames)
 
-    # --------------------------
-    # Ovládací panel pod grafikou
-    # --------------------------
+    # --- (OOvládání zůstává stejné jako ve vašem kódu) ---
     ctrl = tk.Frame(root_frame); ctrl.pack(side="bottom", fill="x")
-
-    # Posuvník pro přeskakování snímků
     slider = ttk.Scale(ctrl, from_=0, to=frames-1, orient='horizontal', length=400)
-    slider.set(0)
-    slider.pack(side='left', padx=6, pady=4)
-
-    frame_label = ttk.Label(ctrl, text=f"1/{frames}")
-    frame_label.pack(side='left', padx=6)
+    slider.set(0); slider.pack(side='left', padx=6, pady=4)
+    frame_label = ttk.Label(ctrl, text=f"1/{frames}"); frame_label.pack(side='left', padx=6)
 
     def slider_changed(val):
         i = int(float(val))
@@ -250,14 +261,12 @@ def animate_algorithm(root_frame, func_name, lb, ub, algo="blind", iterations=20
         state['playing'] = False
     slider.config(command=slider_changed)
 
-    # Tlačítka Play/Pause a krokování
     def on_play_pause():
         if state['playing']:
             ani.event_source.stop(); state['playing']=False; play_btn.config(text='Play')
         else:
             ani.event_source.start(); state['playing']=True; play_btn.config(text='Pause')
-    play_btn = ttk.Button(ctrl, text='Pause', command=on_play_pause)
-    play_btn.pack(side='left', padx=4)
+    play_btn = ttk.Button(ctrl, text='Pause', command=on_play_pause); play_btn.pack(side='left', padx=4)
 
     def step_forward():
         i = min(frames-1, state['idx']+1)
@@ -267,12 +276,8 @@ def animate_algorithm(root_frame, func_name, lb, ub, algo="blind", iterations=20
         slider.set(i); slider_changed(i)
     ttk.Button(ctrl, text='◀', command=step_back).pack(side='left', padx=2)
     ttk.Button(ctrl, text='▶', command=step_forward).pack(side='left', padx=2)
+    ttk.Button(ctrl, text='Restart', command=lambda: (slider.set(0), slider_changed(0))).pack(side='left', padx=6)
 
-    def restart():
-        slider.set(0); slider_changed(0)
-    ttk.Button(ctrl, text='Restart', command=restart).pack(side='left', padx=6)
-
-    # Nastavení rychlosti animace
     ttk.Label(ctrl, text='Rychlost (ms):').pack(side='left', padx=(12,2))
     speed_var = tk.IntVar(value=state['interval'])
     def speed_changed():
@@ -282,14 +287,12 @@ def animate_algorithm(root_frame, func_name, lb, ub, algo="blind", iterations=20
     speed_spin = ttk.Spinbox(ctrl, from_=10, to=2000, increment=10, textvariable=speed_var, width=6, command=speed_changed)
     speed_spin.pack(side='left')
 
-    # Ovládání pohledu (3D kamera)
     view_frame = tk.Frame(root_frame); view_frame.pack(side='bottom', fill='x')
     def set_view(elev, azim):
         ax3d.view_init(elev=elev, azim=azim); canvas.draw()
     for text, e,a in [('Front',20,-60), ('Back',20,120), ('Top',90,-90), ('Side',20,0)]:
         ttk.Button(view_frame, text=text, command=lambda ee=e,aa=a: set_view(ee,aa)).pack(side='left', padx=4)
 
-    # Synchronizace slideru při běhu animace
     def on_timer(event):
         i = int(state['idx'])
         slider.set(i)
@@ -319,7 +322,7 @@ def plot_function(func: Function, lb=-5, ub=5, res=200):
 # --------------------------
 def main():
     root = tk.Tk()
-    root.title("Function Visualization App — české komentáře")
+    root.title("Function Visualization App")
     root.geometry("1300x760")
 
     # Levý panel: menu funkcí
