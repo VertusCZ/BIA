@@ -182,10 +182,13 @@ def animate_algorithm(root_frame, func_name, lb, ub, algo="blind",
 
     # Získání historie zvoleného algoritmu
     func = Function(func_name)
-    if algo=="blind":
+    if algo == "blind":
         _, history = blind_search(func, iterations=iterations, lb=lb, ub=ub, seed=seed)
-    else:
-        history = hill_climbing(func, lb=lb, ub=ub, iterations=iterations, sigma=0.4, k_neighbors=10, seed=seed)['history']
+    elif algo == "hill":
+        history = hill_climbing(func, lb=lb, ub=ub, iterations=iterations, sigma=0.4, k_neighbors=10, seed=seed)[
+            'history']
+    elif algo == "sa":
+        history = simulated_annealing(func, lb=lb, ub=ub, iterations=iterations, seed=seed)['history']
 
     # Vytvoření mřížky pro vykreslení povrchu
     xs = np.linspace(lb, ub, grid_res); ys = np.linspace(lb, ub, grid_res)
@@ -398,12 +401,15 @@ def main():
 
     for label,fname,lb,ub in functions:
         ttk.Label(scrollable_frame, text=label, font=("Arial",10,"bold")).pack(pady=(8,2))
-        ttk.Button(scrollable_frame, text=f"Plot {label}",
-                   command=lambda f=fname,lo=lb,up=ub: show_in_tk(plot_function(Function(f), lb=lo, ub=up), plot_frame)).pack(padx=5, pady=2, fill="x")
         ttk.Button(scrollable_frame, text=f"Blind Search {label}",
                    command=lambda f=fname,lo=lb,up=ub: animate_algorithm(plot_frame, f, lo, up, algo="blind", iterations=300, seed=42)).pack(padx=5, pady=2, fill="x")
         ttk.Button(scrollable_frame, text=f"Hill Climbing {label}",
                    command=lambda f=fname,lo=lb,up=ub: animate_algorithm(plot_frame, f, lo, up, algo="hill", iterations=300, seed=42)).pack(padx=5, pady=2, fill="x")
+        ttk.Button(scrollable_frame, text=f"Simulated Annealing {label}",
+                   command=lambda f=fname, lo=lb, up=ub: animate_algorithm(plot_frame, f, lo, up, algo="sa",
+                                                                           iterations=300, seed=42)).pack(padx=5,
+                                                                                                          pady=2,
+                                                                                                          fill="x")
 
     root.mainloop()
 
