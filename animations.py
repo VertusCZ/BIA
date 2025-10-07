@@ -63,11 +63,6 @@ def animate_tsp(root_frame, n_cities=30, population_size=20, generations=200, se
     avg_fitness_line, = ax_fitness.plot([], [], 'b--', linewidth=1, alpha=0.7, label='Průměr')
     ax_fitness.legend()
 
-    info_text = ax_map.text(0.02, 0.98, '', transform=ax_map.transAxes,
-                            verticalalignment='top', fontsize=11, weight='bold',
-                            bbox=dict(boxstyle='round', facecolor='white',
-                                      edgecolor='black', linewidth=2, alpha=0.95))
-
     frames = len(history)
     state = {'idx': 0, 'playing': True, 'interval': 200}
 
@@ -75,8 +70,7 @@ def animate_tsp(root_frame, n_cities=30, population_size=20, generations=200, se
         route_line.set_data([], [])
         best_fitness_line.set_data([], [])
         avg_fitness_line.set_data([], [])
-        info_text.set_text('')
-        return route_line, best_fitness_line, avg_fitness_line, info_text
+        return route_line, best_fitness_line, avg_fitness_line
 
     def update(frame):
         i = int(frame)
@@ -84,7 +78,6 @@ def animate_tsp(root_frame, n_cities=30, population_size=20, generations=200, se
 
         current = history[i]
         best_route = current['best']
-        best_fit = current['best_fitness']
 
         route_x = [tsp.cities[city_idx, 0] for city_idx in best_route]
         route_y = [tsp.cities[city_idx, 1] for city_idx in best_route]
@@ -92,27 +85,30 @@ def animate_tsp(root_frame, n_cities=30, population_size=20, generations=200, se
         route_y.append(route_y[0])
         route_line.set_data(route_x, route_y)
 
-        generations = [h['generation'] for h in history[:i + 1]]
+        generations_data = [h['generation'] for h in history[:i + 1]]
         best_fits = [h['best_fitness'] for h in history[:i + 1]]
         avg_fits = [np.mean(h['fitness']) for h in history[:i + 1]]
 
-        best_fitness_line.set_data(generations, best_fits)
-        avg_fitness_line.set_data(generations, avg_fits)
+        best_fitness_line.set_data(generations_data, best_fits)
+        avg_fitness_line.set_data(generations_data, avg_fits)
 
-        ax_fitness.set_xlim(0, max(10, max(generations)))
+        ax_fitness.set_xlim(0, max(10, max(generations_data)))
         ax_fitness.set_ylim(min(best_fits) * 0.9, max(avg_fits) * 1.1)
 
-        info_text.set_text(f'Generace: {current["generation"]}\n'
-                           f'Nejlepší délka: {best_fit:.2f}\n'
-                           f'Průměrná délka: {np.mean(current["fitness"]):.2f}')
-
-        return route_line, best_fitness_line, avg_fitness_line, info_text
+        return route_line, best_fitness_line, avg_fitness_line
 
     ani = animation.FuncAnimation(fig, update, frames=frames, init_func=init,
                                   interval=state['interval'], blit=False)
     ani.event_source.start()
 
     canvas = show_in_tk(fig, root_frame, anim=ani, update_fn=update, total_frames=frames)
+
+    # Info panel nad ovládacími prvky
+    info_frame = tk.Frame(root_frame, relief=tk.RIDGE, borderwidth=2, bg='white')
+    info_frame.pack(side="bottom", fill="x", padx=5, pady=(5, 0))
+    info_label = tk.Label(info_frame, text='Generace: 0 | Nejlepší délka: - | Průměrná délka: -',
+                          font=('Arial', 10, 'bold'), bg='white', fg='black', padx=10, pady=8)
+    info_label.pack(side='left')
 
     ctrl = tk.Frame(root_frame)
     ctrl.pack(side="bottom", fill="x")
@@ -129,6 +125,11 @@ def animate_tsp(root_frame, n_cities=30, population_size=20, generations=200, se
         canvas.draw()
         frame_label.config(text=f"{i + 1}/{frames}")
         state['playing'] = False
+        # Aktualizace info labelu
+        current = history[i]
+        info_label.config(text=f'Generace: {current["generation"]} | '
+                               f'Nejlepší délka: {current["best_fitness"]:.2f} | '
+                               f'Průměrná délka: {np.mean(current["fitness"]):.2f}')
 
     slider.config(command=slider_changed)
 
@@ -175,6 +176,12 @@ def animate_tsp(root_frame, n_cities=30, population_size=20, generations=200, se
         i = int(state['idx'])
         slider.set(i)
         frame_label.config(text=f"{i + 1}/{frames}")
+        # Aktualizace info labelu
+        if i < len(history):
+            current = history[i]
+            info_label.config(text=f'Generace: {current["generation"]} | '
+                                   f'Nejlepší délka: {current["best_fitness"]:.2f} | '
+                                   f'Průměrná délka: {np.mean(current["fitness"]):.2f}')
         root_frame.after(50, lambda: on_timer(None))
 
     root_frame.after(50, lambda: on_timer(None))
