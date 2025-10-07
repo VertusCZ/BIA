@@ -121,29 +121,38 @@ def simulated_annealing(func: Function,
     if seed is not None:
         np.random.seed(seed)
 
+    # Inicializace - vytvoření náhodného počátečního bodu.
     current = np.random.uniform(lb, ub, size=dimension)
     current_f = float(func.eval(current))
     best = current.copy()
     best_f = current_f
     history = [(current.copy(), current_f)]
 
+    # Nastavení počáteční "teploty", která ovlivňuje pravděpodobnost přijetí horšího řešení.
     T = T0
     for _ in range(iterations):
+        # Krok 2: Vytvoření nového kandidátského řešení v okolí aktuálního.
         cand = current + np.random.normal(0, sigma, size=dimension)
         cand = np.clip(cand, lb, ub)
         fval = float(func.eval(cand))
 
+        # Pokud je nové řešení lepší, přijme se vždy.
         if fval < current_f:
             current, current_f = cand, fval
         else:
+            # Pokud je horší, přijme se s určitou pravděpodobností, která klesá s "teplotou".
+            # To umožňuje algoritmu uniknout z lokálních minim.
             r = np.random.rand()
             if r < np.exp(-(fval - current_f) / T):
                 current, current_f = cand, fval
 
+        # Aktualizace nejlepšího nalezeného řešení.
         if current_f < best_f:
             best, best_f = current.copy(), current_f
 
         history.append((current.copy(), current_f))
+
+        # snižování teploty.
         T = max(T * alpha, Tmin)
 
     return {'best': best, 'best_f': best_f, 'history': history}
