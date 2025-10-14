@@ -1,5 +1,6 @@
 import math
 import numpy as np
+from copy import deepcopy
 
 
 class Function:
@@ -156,3 +157,120 @@ def simulated_annealing(func: Function,
         T = max(T * alpha, Tmin)
 
     return {'best': best, 'best_f': best_f, 'history': history}
+
+
+# --- Differential Evolution ---
+
+class Solution:
+    """Třída pro reprezentaci jedince (řešení)"""
+    def __init__(self, dimension, lower_bound, upper_bound):
+        self.dimension = dimension
+        self.lower_bound = lower_bound
+        self.upper_bound = upper_bound
+        self.params = np.random.uniform(lower_bound, upper_bound, dimension)
+        self.f = float('inf')  # fitness value
+    
+    def evaluate(self, fitness_function):
+        """Vyhodnocení fitness funkce"""
+        self.f = fitness_function(self.params)
+        return self.f
+
+
+def differential_evolution(func: Function,
+                          dimension=2,
+                          lb=-5.0, ub=5.0,
+                          NP=50, F=0.5, CR=0.9,
+                          iterations=300,
+                          seed=None):
+    """
+    Differential Evolution algoritmus
+    
+    Parametry:
+    - func: Function objekt k optimalizaci
+    - dimension: dimenze problému
+    - lb: dolní hranice proměnných
+    - ub: horní hranice proměnných
+    - NP: velikost populace
+    - F: mutační konstanta (0 < F <= 2)
+    - CR: crossover konstanta (0 <= CR <= 1)
+    - iterations: maximální počet generací
+    - seed: random seed
+    """
+    if seed is not None:
+        np.random.seed(seed)
+    
+    def check_boundaries(params):
+        """Kontrola a oprava hranic"""
+        return np.clip(params, lb, ub)
+    
+    # Generování počáteční populace
+    pop = [Solution(dimension, lb, ub) for _ in range(NP)]
+    
+    # Vyhodnocení počáteční populace
+    for sol in pop:
+        sol.evaluate(lambda x: func.eval(x))
+    
+    best_solution = None
+    history = []
+    
+    g = 0
+    while g < iterations:
+        # Uložení aktuálního stavu pro animaci
+        current_positions = np.array([sol.params for sol in pop])
+        current_fitness = np.array([sol.f for sol in pop])
+        best_idx = np.argmin(current_fitness)
+        
+        if best_solution is None or current_fitness[best_idx] < best_solution.f:
+            best_solution = deepcopy(pop[best_idx])
+        
+        # Pro 2D vizualizaci ukládáme pouze první 2 dimenze
+        if dimension == 2:
+            history.append((current_positions.copy(), current_fitness.copy(), 
+                          best_solution.params.copy(), best_solution.f))
+        else:
+            # Pro vyšší dimenze ukládáme jen nejlepší řešení
+            history.append((current_positions[:, :2].copy(), current_fitness.copy(),
+                          best_solution.params[:2].copy(), best_solution.f))
+        
+        new_pop = deepcopy(pop)
+        
+        for i, x in enumerate(pop):  # x je target vector
+            # Výběr tří náhodných indexů odlišných od i
+            indices = [idx for idx in range(NP) if idx != i]
+            r1, r2, r3 = np.random.choice(indices, 3, replace=False)
+            
+            # MUTACE: v = (x_r1 - x_r2) * F + x_r3
+            v = (pop[r1].params - pop[r2].params) * F + pop[r3].params
+            v = check_boundaries(v)  # KONTROLA HRANIC
+            
+            # KŘÍŽENÍ (Crossover)
+            u = np.zeros(dimension)  # trial vector
+            j_rnd = np.random.randint(0, dimension)
+            
+            for j in range(dimension):
+                if np.random.uniform() < CR or j == j_rnd:
+                    u[j] = v[j]  # alespoň 1 parametr z mutačního vektoru
+                else:
+                    u[j] = x.params[j]
+            
+            # Vyhodnocení trial vektoru
+            f_u = func.eval(u)
+            
+            # SELEKCE: porovnání s target vektorem
+            if f_u <= x.f:  # lepší nebo stejné řešení
+                new_x = Solution(dimension, lb, ub)
+                new_x.params = u
+                new_x.f = f_u
+                new_pop[i] = new_x
+        
+        pop = new_pop
+        g += 1
+    
+    # Finální záznam
+    current_positions = np.array([sol.params for sol in pop])
+    current_fitness = np.array([sol.f for sol in pop])
+    best_idx = np.argmin(current_fitness)
+    if current_fitness[best_idx] < best_solution.f:
+        best_solution = deepcopy(pop[best_idx])
+    
+    return {'best': best_solution.params, 'best_f': best_solution.f, 'history': history}
