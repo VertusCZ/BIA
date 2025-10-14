@@ -2,7 +2,7 @@ import math
 import tkinter as tk
 from tkinter import ttk
 
-from animations import animate_tsp, animate_algorithm
+from animations import animate_tsp, animate_algorithm, animate_de
 def main():
     root = tk.Tk()
     root.title("Optimization Algorithms Visualization")
@@ -67,5 +67,8 @@ def main():
                                                                             iterations=300, seed=42)).pack(padx=5,
                                                                                                            pady=2,
                                                                                                            fill="x")
+        ttk.Button(scrollable_frame, text=f"Diff. Evolution {label}",
+                   command=lambda f=fname, lo=lb, up=ub: animate_de(plot_frame, f, lo, up, 
+                                                                     iterations=200, NP=50, F=0.5, CR=0.9, seed=42)).pack(padx=5, pady=2, fill="x")
 
     root.mainloop()
