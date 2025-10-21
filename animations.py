@@ -10,7 +10,7 @@ from matplotlib import animation
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed by Matplotlib)
 import numpy as np
 
-from functions_algos import Function, blind_search, hill_climbing, simulated_annealing, differential_evolution
+from functions_algos import Function, blind_search, hill_climbing, simulated_annealing, differential_evolution, particle_swarm_optimization
 from tsp_ga import TSP, genetic_algorithm_tsp
 
 
@@ -544,4 +544,195 @@ def animate_de(root_frame, func_name, lb, ub,
     
     root_frame.after(50, lambda: on_timer_de(None))
     
+    return ani
+
+# --- Particle Swarm Optimization (PSO) animation ---
+
+def animate_pso(root_frame, func_name, lb, ub,
+                iterations=200, pop_size=30, w=0.7, c1=1.5, c2=1.5,
+                v_min=-1.0, v_max=1.0, seed=42, grid_res=60):
+    """
+    Animace Particle Swarm Optimization algoritmu
+    
+    Parametry:
+    - root_frame: Tkinter frame pro zobrazení
+    - func_name: název funkce (sphere, rastrigin, atd.)
+    - lb, ub: dolní a horní hranice
+    - iterations: počet iterací
+    - pop_size: velikost hejna
+    - w, c1, c2: parametry PSO
+    - v_min, v_max: limity rychlosti
+    - seed: random seed
+    - grid_res: rozlišení gridu pro vykreslení funkce
+    """
+    func = Function(func_name)
+    result = particle_swarm_optimization(
+        func, dimension=2, lb=lb, ub=ub,
+        pop_size=pop_size, iterations=iterations,
+        w=w, c1=c1, c2=c2, v_min=v_min, v_max=v_max,
+        seed=seed
+    )
+    history = result['history']
+
+    # Vytvoření gridu pro vykreslení funkce
+    xs = np.linspace(lb, ub, grid_res)
+    ys = np.linspace(lb, ub, grid_res)
+    X, Y = np.meshgrid(xs, ys)
+    vec_eval = np.vectorize(lambda a, b: float(func.eval([a, b])))
+    Z = vec_eval(X, Y)
+
+    fig = plt.Figure(figsize=(9, 5))
+    ax3d = fig.add_subplot(121, projection="3d")
+    ax2d = fig.add_subplot(122)
+
+    # 3D surface a 2D kontura
+    ax3d.plot_surface(X, Y, Z, cmap="viridis", alpha=0.8, linewidth=0, antialiased=False)
+    mesh = ax2d.pcolormesh(X, Y, Z, shading='auto')
+    fig.colorbar(mesh, ax=ax2d, shrink=0.6)
+
+    ax3d.set_title(f"{func.name.capitalize()} - PSO (3D)")
+    ax2d.set_title(f"{func.name.capitalize()} - PSO (2D kontura)")
+    ax2d.set_xlim(lb, ub)
+    ax2d.set_ylim(lb, ub)
+    ax3d.view_init(elev=30, azim=-60)
+
+    # Scatter pro hejno (aktuální iterace)
+    swarm3d = ax3d.scatter([], [], [], s=30, c='red', alpha=0.6)
+    swarm2d = ax2d.scatter([], [], s=30, c='red', alpha=0.6)
+
+    # Nejlepší řešení (globální best)
+    gbest3d = ax3d.scatter([], [], [], s=140, marker='*', color='gold')
+    gbest2d = ax2d.scatter([], [], s=140, marker='*', color='gold')
+
+    frames = len(history)
+    state = {'idx': 0, 'playing': True, 'interval': 150}
+
+    def init():
+        swarm3d._offsets3d = ([], [], [])
+        swarm2d.set_offsets([])
+        gbest3d._offsets3d = ([], [], [])
+        gbest2d.set_offsets([])
+        return swarm3d, swarm2d, gbest3d, gbest2d
+
+    def update(frame):
+        i = int(frame)
+        state['idx'] = i
+
+        positions, fitness, best_pos, best_fit = history[i]
+
+        # Aktualizace hejna v 3D a 2D
+        swarm3d._offsets3d = (positions[:, 0], positions[:, 1], fitness)
+        swarm2d.set_offsets(positions[:, 0:2])
+
+        # Globální nejlepší řešení
+        gbest3d._offsets3d = ([best_pos[0]], [best_pos[1]], [best_fit])
+        gbest2d.set_offsets([[best_pos[0], best_pos[1]]])
+
+        return swarm3d, swarm2d, gbest3d, gbest2d
+
+    ani = animation.FuncAnimation(fig, update, frames=frames, init_func=init,
+                                  interval=state['interval'], blit=False)
+    ani.event_source.start()
+
+    canvas = show_in_tk(fig, root_frame, anim=ani, update_fn=update, total_frames=frames)
+
+    # Info panel
+    info_frame = tk.Frame(root_frame, relief=tk.RIDGE, borderwidth=2, bg='white')
+    info_frame.pack(side="bottom", fill="x", padx=5, pady=(5, 0))
+    info_label = tk.Label(
+        info_frame,
+        text=(f'Iterace: 0 | Nejlepší fitness: - | Průměrná fitness: - | '
+              f'pop={pop_size}, w={w}, c1={c1}, c2={c2}'),
+        font=('Arial', 10, 'bold'), bg='white', fg='black', padx=10, pady=8
+    )
+    info_label.pack(side='left')
+
+    # Ovládací prvky
+    ctrl = tk.Frame(root_frame)
+    ctrl.pack(side="bottom", fill="x")
+    slider = ttk.Scale(ctrl, from_=0, to=frames - 1, orient='horizontal', length=400)
+    slider.set(0)
+    slider.pack(side='left', padx=6, pady=4)
+    frame_label = ttk.Label(ctrl, text=f"1/{frames}")
+    frame_label.pack(side='left', padx=6)
+
+    def slider_changed(val):
+        i = int(float(val))
+        ani.event_source.stop()
+        update(i)
+        canvas.draw()
+        frame_label.config(text=f"{i + 1}/{frames}")
+        state['playing'] = False
+        # Aktualizace info labelu
+        _, fitness, _, best_fit = history[i]
+        info_label.config(text=(f'Iterace: {i} | Nejlepší fitness: {best_fit:.6f} | '
+                                f'Průměrná fitness: {np.mean(fitness):.6f} | '
+                                f'pop={pop_size}, w={w}, c1={c1}, c2={c2}'))
+
+    slider.config(command=slider_changed)
+
+    def on_play_pause():
+        if state['playing']:
+            ani.event_source.stop()
+            state['playing'] = False
+            play_btn.config(text='Play')
+        else:
+            ani.event_source.start()
+            state['playing'] = True
+            play_btn.config(text='Pause')
+
+    play_btn = ttk.Button(ctrl, text='Pause', command=on_play_pause)
+    play_btn.pack(side='left', padx=4)
+
+    def step_forward():
+        i = min(frames - 1, state['idx'] + 1)
+        slider.set(i)
+        slider_changed(i)
+
+    def step_back():
+        i = max(0, state['idx'] - 1)
+        slider.set(i)
+        slider_changed(i)
+
+    ttk.Button(ctrl, text='◀', command=step_back).pack(side='left', padx=2)
+    ttk.Button(ctrl, text='▶', command=step_forward).pack(side='left', padx=2)
+    ttk.Button(ctrl, text='Restart', command=lambda: (slider.set(0), slider_changed(0))).pack(side='left', padx=6)
+
+    ttk.Label(ctrl, text='Rychlost (ms):').pack(side='left', padx=(12, 2))
+    speed_var = tk.IntVar(value=state['interval'])
+
+    def speed_changed():
+        ival = max(10, speed_var.get())
+        state['interval'] = ival
+        ani.event_source.interval = ival
+
+    speed_spin = ttk.Spinbox(ctrl, from_=10, to=2000, increment=10, textvariable=speed_var, width=6,
+                             command=speed_changed)
+    speed_spin.pack(side='left')
+
+    # Tlačítka pro změnu pohledu
+    view_frame = tk.Frame(root_frame)
+    view_frame.pack(side='bottom', fill='x')
+
+    def set_view(elev, azim):
+        ax3d.view_init(elev=elev, azim=azim)
+        canvas.draw()
+
+    for text, e, a in [('Front', 20, -60), ('Back', 20, 120), ('Top', 90, -90), ('Side', 20, 0)]:
+        ttk.Button(view_frame, text=text, command=lambda ee=e, aa=a: set_view(ee, aa)).pack(side='left', padx=4)
+
+    def on_timer(event):
+        i = int(state['idx'])
+        slider.set(i)
+        frame_label.config(text=f"{i + 1}/{frames}")
+        # Aktualizace info labelu
+        if i < len(history):
+            _, fitness, _, best_fit = history[i]
+            info_label.config(text=(f'Iterace: {i} | Nejlepší fitness: {best_fit:.6f} | '
+                                    f'Průměrná fitness: {np.mean(fitness):.6f} | '
+                                    f'pop={pop_size}, w={w}, c1={c1}, c2={c2}'))
+        root_frame.after(50, lambda: on_timer(None))
+
+    root_frame.after(50, lambda: on_timer(None))
+
     return ani

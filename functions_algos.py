@@ -274,3 +274,92 @@ def differential_evolution(func: Function,
         best_solution = deepcopy(pop[best_idx])
     
     return {'best': best_solution.params, 'best_f': best_solution.f, 'history': history}
+
+def particle_swarm_optimization(func: Function,
+                                dimension=2,
+                                lb=-5.0, ub=5.0,
+                                pop_size=30,
+                                iterations=200,
+                                w=0.7, c1=1.5, c2=1.5,
+                                v_min=-1.0, v_max=1.0,
+                                seed=None):
+    """
+    Particle Swarm Optimization (PSO)
+    ---------------------------------
+    Biologically inspired optimization algorithm based on swarm intelligence.
+
+    Parametry:
+    - func: objekt třídy Function
+    - dimension: počet dimenzí problému
+    - lb, ub: dolní a horní hranice proměnných
+    - pop_size: počet částic (velikost hejna)
+    - iterations: počet iterací
+    - w: váha setrvačnosti (inertia weight)
+    - c1, c2: učící koeficienty (vliv osobního a globálního nejlepšího řešení)
+    - v_min, v_max: limity rychlosti částic
+    - seed: random seed pro reprodukovatelnost
+    """
+
+    if seed is not None:
+        np.random.seed(seed)
+
+    # === Inicializace hejna ===
+    swarm = [Solution(dimension, lb, ub) for _ in range(pop_size)]
+    velocities = [np.random.uniform(v_min, v_max, dimension) for _ in range(pop_size)]
+
+    # Vyhodnocení částic
+    for particle in swarm:
+        particle.evaluate(lambda x: func.eval(x))
+
+    # Nastavení pBest a gBest
+    personal_best_positions = [p.params.copy() for p in swarm]
+    personal_best_scores = [p.f for p in swarm]
+
+    best_idx = np.argmin(personal_best_scores)
+    global_best_position = personal_best_positions[best_idx].copy()
+    global_best_score = personal_best_scores[best_idx]
+
+    history = []
+
+    # === Hlavní smyčka ===
+    for it in range(iterations):
+        for i, particle in enumerate(swarm):
+            # Výpočet nové rychlosti
+            r1, r2 = np.random.rand(), np.random.rand()
+            velocities[i] = (
+                w * velocities[i]
+                + c1 * r1 * (personal_best_positions[i] - particle.params)
+                + c2 * r2 * (global_best_position - particle.params)
+            )
+
+            # Kontrola hranic rychlosti
+            velocities[i] = np.clip(velocities[i], v_min, v_max)
+
+            # Aktualizace pozice částice
+            particle.params += velocities[i]
+            particle.params = np.clip(particle.params, lb, ub)
+
+            # Vyhodnocení nové pozice
+            particle.evaluate(lambda x: func.eval(x))
+
+            # Aktualizace osobního nejlepšího výsledku (pBest)
+            if particle.f < personal_best_scores[i]:
+                personal_best_scores[i] = particle.f
+                personal_best_positions[i] = particle.params.copy()
+
+                # Aktualizace globálního nejlepšího výsledku (gBest)
+                if particle.f < global_best_score:
+                    global_best_score = particle.f
+                    global_best_position = particle.params.copy()
+
+        # Uložení do historie pro případnou vizualizaci
+        positions = np.array([p.params for p in swarm])
+        fitnesses = np.array([p.f for p in swarm])
+        history.append((positions.copy(), fitnesses.copy(),
+                        global_best_position.copy(), global_best_score))
+
+        print(f"Iterace {it+1}/{iterations} | Nejlepší hodnota: {global_best_score:.6f}")
+
+    # Výsledek
+    return {'best': global_best_position, 'best_f': global_best_score, 'history': history}
+
