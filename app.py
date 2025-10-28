@@ -2,7 +2,7 @@ import math
 import tkinter as tk
 from tkinter import ttk
 
-from animations import animate_tsp, animate_algorithm, animate_de, animate_pso
+from animations import animate_tsp, animate_algorithm, animate_de, animate_pso, animate_soma
 def main():
     root = tk.Tk()
     root.title("Optimization Algorithms Visualization")
@@ -73,5 +73,8 @@ def main():
         ttk.Button(scrollable_frame, text=f"PSO {label}",
                    command=lambda f=fname, lo=lb, up=ub: animate_pso(plot_frame, f, lo, up, 
                                                                       iterations=200, pop_size=30, w=0.7, c1=1.5, c2=1.5, seed=42)).pack(padx=5, pady=2, fill="x")
+        ttk.Button(scrollable_frame, text=f"SOMA {label}",
+                   command=lambda f=fname, lo=lb, up=ub: animate_soma(plot_frame, f, lo, up,
+                                                                       iterations=200, pop_size=30, path_length=3.0, step=0.11, prt=0.1, strategy='all_to_one', seed=42)).pack(padx=5, pady=2, fill="x")
 
     root.mainloop()

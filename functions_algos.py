@@ -363,3 +363,156 @@ def particle_swarm_optimization(func: Function,
     # Výsledek
     return {'best': global_best_position, 'best_f': global_best_score, 'history': history}
 
+
+def soma(func,
+         dimension=2,
+         lb=-5.0, ub=5.0,
+         pop_size=30,
+         iterations=200,
+         path_length=3.0,
+         step=0.11,
+         prt=0.1,
+         strategy='all_to_one',
+         seed=None):
+    """
+    Self-Organizing Migrating Algorithm (SOMA)
+
+    Parametry:
+    - func: Function objekt k optimalizaci
+    - dimension: dimenze problému
+    - lb: dolní hranice proměnných
+    - ub: horní hranice proměnných
+    - pop_size: velikost populace (NP)
+    - iterations: počet migračních cyklů
+    - path_length: jak daleko může jedinec migrovat (typicky 1.1 - 3.0)
+    - step: velikost kroku při migraci (typicky 0.11)
+    - prt: pravděpodobnost perturbace (0.0 - 1.0, typicky 0.1)
+    - strategy: 'all_to_one' nebo 'all_to_all'
+    - seed: random seed
+    """
+    if seed is not None:
+        np.random.seed(seed)
+
+    # === Inicializace populace ===
+    class Individual:
+        def __init__(self, dim, lower, upper):
+            self.params = np.random.uniform(lower, upper, dim)
+            self.f = float('inf')
+
+        def evaluate(self, func_obj):
+            self.f = func_obj.eval(self.params)
+            return self.f
+
+    # Vytvoření počáteční populace
+    population = [Individual(dimension, lb, ub) for _ in range(pop_size)]
+
+    # Vyhodnocení počáteční populace
+    for ind in population:
+        ind.evaluate(func)
+
+    # Najdi nejlepšího jedince
+    fitness_values = [ind.f for ind in population]
+    best_idx = np.argmin(fitness_values)
+    global_best = deepcopy(population[best_idx])
+
+    history = []
+
+    # === Hlavní smyčka SOMA ===
+    for gen in range(iterations):
+        # Uložení stavu pro vizualizaci
+        positions = np.array([ind.params for ind in population])
+        fitnesses = np.array([ind.f for ind in population])
+        history.append((positions.copy(), fitnesses.copy(),
+                        global_best.params.copy(), global_best.f))
+
+        # Najdi aktuálního leadera
+        fitness_values = [ind.f for ind in population]
+        leader_idx = np.argmin(fitness_values)
+        leader = population[leader_idx]
+
+        # Vytvoření nové populace
+        new_population = []
+
+        # === Migrace každého jedince ===
+        for i, individual in enumerate(population):
+
+            if strategy == 'all_to_one':
+                # All-to-One: všichni migrují k leaderovi
+                if i == leader_idx:
+                    # Leader nemigruje, zůstává na místě
+                    new_population.append(deepcopy(individual))
+                    continue
+                target = leader
+
+            elif strategy == 'all_to_all':
+                # All-to-All: každý migruje ke každému jinému
+                # Pro zjednodušení zde implementujeme jen All-to-One
+                # V plné verzi by se dělalo více migrací
+                target = leader
+
+            # Generování PRT vektoru (perturbační vektor)
+            # Pro každou dimenzi: 1 pokud rand < prt, jinak 0
+            prt_vector = (np.random.rand(dimension) < prt).astype(float)
+
+            # Pokud jsou všechny nuly, nastav alespoň jednu dimenzi
+            if np.sum(prt_vector) == 0:
+                prt_vector[np.random.randint(0, dimension)] = 1.0
+
+            # Inicializace nejlepší pozice pro tohoto jedince
+            best_position = individual.params.copy()
+            best_fitness = individual.f
+
+            # === Migrace po cestě k cíli ===
+            t = 0.0  # Parametr cesty (0 = start, path_length = nad cílem)
+
+            while t <= path_length:
+                # Výpočet nové pozice
+                # new_pos = start + t * (target - start) * prt_vector
+                new_position = (individual.params +
+                                t * (target.params - individual.params) * prt_vector)
+
+                # Kontrola hranic
+                new_position = np.clip(new_position, lb, ub)
+
+                # Vyhodnocení fitness
+                new_fitness = func.eval(new_position)
+
+                # Zapamatuj si nejlepší pozici na této cestě
+                if new_fitness < best_fitness:
+                    best_position = new_position.copy()
+                    best_fitness = new_fitness
+
+                # Další krok po cestě
+                t += step
+
+            # Vytvoření nového jedince na nejlepší nalezené pozici
+            new_ind = Individual(dimension, lb, ub)
+            new_ind.params = best_position
+            new_ind.f = best_fitness
+            new_population.append(new_ind)
+
+        # Aktualizace populace
+        population = new_population
+
+        # Aktualizace globálně nejlepšího řešení
+        fitness_values = [ind.f for ind in population]
+        current_best_idx = np.argmin(fitness_values)
+        if population[current_best_idx].f < global_best.f:
+            global_best = deepcopy(population[current_best_idx])
+
+        # Výpis průběhu
+        print(f"Generace {gen + 1}/{iterations} | "
+              f"Nejlepší: {global_best.f:.6f} | "
+              f"Průměr: {np.mean(fitness_values):.6f}")
+
+    # Finální záznam
+    positions = np.array([ind.params for ind in population])
+    fitnesses = np.array([ind.f for ind in population])
+    history.append((positions.copy(), fitnesses.copy(),
+                    global_best.params.copy(), global_best.f))
+
+    return {
+        'best': global_best.params,
+        'best_f': global_best.f,
+        'history': history
+    }
