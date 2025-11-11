@@ -8,6 +8,7 @@ from animations import (
     animate_de,
     animate_pso,
     animate_soma,
+    animate_firefly,
 )
 from aco_animation import animate_aco
 
@@ -48,6 +49,7 @@ def build_sidebar(parent, plot_frame):
         ttk.Button(frm, text="Differential Evolution", command=lambda: animate_de(plot_frame, key, lb, ub, iterations=200, NP=40, seed=42)).pack(fill="x", padx=4, pady=2)
         ttk.Button(frm, text="Particle Swarm", command=lambda: animate_pso(plot_frame, key, lb, ub, iterations=200, pop_size=30, seed=42)).pack(fill="x", padx=4, pady=2)
         ttk.Button(frm, text="SOMA", command=lambda: animate_soma(plot_frame, key, lb, ub, iterations=200, pop_size=30, seed=42)).pack(fill="x", padx=4, pady=2)
+        ttk.Button(frm, text="Firefly Algorithm", command=lambda: animate_firefly(plot_frame, key, lb, ub, iterations=150, n_fireflies=25, alpha=0.5, beta0=1.0, gamma=1.0, seed=42)).pack(fill="x", padx=4, pady=2)
 
     add_func_group("Sphere", "sphere", -5, 5)
     add_func_group("Ackley", "ackley", -5, 5)
